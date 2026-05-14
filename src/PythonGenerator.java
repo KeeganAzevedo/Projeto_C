@@ -1,10 +1,13 @@
 import java.util.ArrayList;
 import java.util.List;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import java.util.HashMap;
+import java.util.Map;
 
 public class PythonGenerator {
 
     private final List<String> lines = new ArrayList<>();
+    private final Map<String, String> variableTypes = new HashMap<>();
 
     public String generate(SafeLangParser.ProgramContext program) {
         lines.clear();
@@ -21,8 +24,6 @@ public class PythonGenerator {
 
     private void generateStatement(SafeLangParser.StatementContext stmt) {
         if (stmt.useStmt() != null) {
-            // Para já ignoramos use na geração.
-            // A análise semântica deve tratar os ficheiros importados.
             lines.add("# use " + stmt.useStmt().STRING_LITERAL().getText());
         }
         else if (stmt.typeDef() != null) {
@@ -49,6 +50,12 @@ public class PythonGenerator {
         else if (stmt.writelnStmt() != null) {
             generateWriteln(stmt.writelnStmt());
         }
+        else if (stmt.tryStmt() != null) {
+            generateTry(stmt.tryStmt());
+        }
+        else if (stmt.retryStmt() != null) {
+            generateRetry(stmt.retryStmt());
+        }
     }
 
     private void generateTypeDef(SafeLangParser.TypeDefContext ctx) {
@@ -69,7 +76,30 @@ public class PythonGenerator {
             }
         }
         else {
-            lines.add("# type " + ctx.ID().getText());
+            String typeName = ctx.ID().getText();
+            String numeric = ctx.numericType().getText();
+
+            if (numeric.equals("integer[8]")) {
+                lines.add("def " + pyName(typeName) + "(value):");
+                lines.add("    value = int(value)");
+                lines.add("    if value < -128 or value > 127:");
+                lines.add("        raise OverflowError(\"" + pyName(typeName) + " overflow\")");
+                lines.add("    return value");
+            }
+            else if (numeric.equals("integer[32]")) {
+                lines.add("def " + pyName(typeName) + "(value):");
+                lines.add("    value = int(value)");
+                lines.add("    if value < -2147483648 or value > 2147483647:");
+                lines.add("        raise OverflowError(\"" + pyName(typeName) + " overflow\")");
+                lines.add("    return value");
+            }
+            else if (numeric.equals("real[64]")) {
+                lines.add("def " + pyName(typeName) + "(value):");
+                lines.add("    return float(value)");
+            }
+            else {
+                lines.add("# type " + pyName(typeName));
+            }
         }
     }
 
@@ -103,18 +133,32 @@ public class PythonGenerator {
 
     private void generateVarDecl(SafeLangParser.VarDeclContext ctx) {
         String name = pyName(ctx.ID().getText());
+        String type = ctx.typeRef().getText();
+
+        variableTypes.put(name, type);
+
         lines.add(name + " = None");
     }
 
     private void generateVarDeclAssign(SafeLangParser.VarDeclAssignContext ctx) {
         String name = pyName(ctx.ID().getText());
+        String type = ctx.typeRef().getText();
+
+        variableTypes.put(name, type);
+
         String value = generateExpr(ctx.expr());
+        value = wrapWithType(value, type);
+
         lines.add(name + " = " + value);
     }
 
     private void generateAssignment(SafeLangParser.AssignmentContext ctx) {
         String name = pyName(ctx.ID().getText());
         String value = generateExpr(ctx.expr());
+
+        String type = variableTypes.get(name);
+        value = wrapWithType(value, type);
+
         lines.add(name + " = " + value);
     }
 
@@ -254,7 +298,7 @@ public class PythonGenerator {
             case "integer" -> "int(" + value + ")";
             case "real" -> "float(" + value + ")";
             case "string" -> "str(" + value + ")";
-            default -> value;
+            default -> pyName(type) + "(" + value + ")";
         };
     }
 
@@ -280,6 +324,44 @@ public class PythonGenerator {
         return ctx.getText();
     }
 
+    private void generateTry(SafeLangParser.TryStmtContext ctx) {
+        lines.add("while True:");
+        lines.add("    try:");
+
+        for (SafeLangParser.StatementContext stmt : ctx.statementList(0).statement()) {
+            generateIndentedStatement(stmt, 2);
+        }
+
+        lines.add("        break");
+
+        if (ctx.statementList().size() > 1) {
+            lines.add("    except Exception:");
+            for (SafeLangParser.StatementContext stmt : ctx.statementList(1).statement()) {
+                generateIndentedStatement(stmt, 2);
+            }
+            lines.add("        break");
+        } else {
+            lines.add("    except Exception:");
+            lines.add("        break");
+        }
+    }
+
+    private void generateRetry(SafeLangParser.RetryStmtContext ctx) {
+        lines.add("continue");
+    }
+
+    private void generateIndentedStatement(SafeLangParser.StatementContext stmt, int indentLevel) {
+        int oldSize = lines.size();
+
+        generateStatement(stmt);
+
+        String indent = "    ".repeat(indentLevel);
+
+        for (int i = oldSize; i < lines.size(); i++) {
+            lines.set(i, indent + lines.get(i));
+        }
+    }
+
     private String pyName(String name) {
         return switch (name) {
             case "False", "None", "True", "and", "as", "assert", "async", "await",
@@ -288,6 +370,18 @@ public class PythonGenerator {
                 "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
                 "return", "try", "while", "with", "yield" -> name + "_";
             default -> name;
+        };
+    }
+    private String wrapWithType(String value, String type) {
+        if (type == null) {
+            return value;
+        }
+
+        return switch (type) {
+            case "integer" -> "int(" + value + ")";
+            case "real" -> "float(" + value + ")";
+            case "string" -> "str(" + value + ")";
+            default -> pyName(type) + "(" + value + ")";
         };
     }
 }

@@ -37,6 +37,36 @@ public interface SafeLangListener extends ParseTreeListener {
 	 */
 	void exitStatement(SafeLangParser.StatementContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link SafeLangParser#statementList}.
+	 * @param ctx the parse tree
+	 */
+	void enterStatementList(SafeLangParser.StatementListContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SafeLangParser#statementList}.
+	 * @param ctx the parse tree
+	 */
+	void exitStatementList(SafeLangParser.StatementListContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SafeLangParser#tryStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterTryStmt(SafeLangParser.TryStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SafeLangParser#tryStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitTryStmt(SafeLangParser.TryStmtContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SafeLangParser#retryStmt}.
+	 * @param ctx the parse tree
+	 */
+	void enterRetryStmt(SafeLangParser.RetryStmtContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SafeLangParser#retryStmt}.
+	 * @param ctx the parse tree
+	 */
+	void exitRetryStmt(SafeLangParser.RetryStmtContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link SafeLangParser#useStmt}.
 	 * @param ctx the parse tree
 	 */

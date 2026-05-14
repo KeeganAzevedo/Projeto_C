@@ -41,7 +41,7 @@ end;
 
 n: integer;
 try
-   n := integer(read "Number");
+   n := integer(read "Number: ");
 rescue
    writeln("ERROR: invalid integer number!");
    retry;

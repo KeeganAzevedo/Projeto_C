@@ -23,6 +23,20 @@ statement
     | assignment
     | writeStmt
     | writelnStmt
+    | tryStmt
+    | retryStmt
+    ;
+
+statementList
+    : separator* (statement separator*)*
+    ;
+
+tryStmt
+    : TRY statementList (RESCUE statementList)? END
+    ;
+
+retryStmt
+    : RETRY
     ;
 
 // ------------------------------------------------------------
@@ -62,8 +76,7 @@ unitSpec
     ;
 
 numericType
-    : INTEGER
-    | REAL
+    : (INTEGER | REAL) (LBRACK INTEGER_LITERAL RBRACK)?
     ;
 
 // ------------------------------------------------------------
@@ -198,10 +211,10 @@ unary
 
 primary
     : literal
-    | ID
     | conversion
     | formatExpr
     | readExpr
+    | ID
     | LPAREN expr RPAREN
     ;
 
@@ -213,6 +226,7 @@ conversionType
     : INTEGER
     | REAL
     | STRING
+    | ID
     ;
 
 formatExpr
@@ -245,6 +259,10 @@ FORMAT  : 'format';
 INTEGER : 'integer';
 REAL    : 'real';
 STRING  : 'string';
+TRY     : 'try';
+RESCUE  : 'rescue';
+RETRY   : 'retry';
+END     : 'end';
 
 // Operators and punctuation
 TRY_ASSIGN  : ':=?';
