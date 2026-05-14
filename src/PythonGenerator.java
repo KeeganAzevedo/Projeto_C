@@ -60,11 +60,11 @@ public class PythonGenerator {
         if (ctx.unitSpec() != null) {
             List<TerminalNode> ids = ctx.unitSpec().ID();
 
-            String mainUnit = ids.get(0).getText();
+            String mainUnit = pyName(ids.get(0).getText());
             lines.add(mainUnit + " = 1.0");
 
             if (ids.size() > 1) {
-                String alias = ids.get(1).getText();
+                String alias = pyName(ids.get(1).getText());
                 lines.add(alias + " = " + mainUnit);
             }
         }
@@ -82,13 +82,13 @@ public class PythonGenerator {
         // in = inch
 
         List<TerminalNode> ids = ctx.unitSpec().ID();
-        String mainUnit = ids.get(0).getText();
+        String mainUnit = pyName(ids.get(0).getText());
         String expr = generateExpr(ctx.expr());
 
         lines.add(mainUnit + " = " + expr);
 
         if (ids.size() > 1) {
-            String alias = ids.get(1).getText();
+            String alias = pyName(ids.get(1).getText());
             lines.add(alias + " = " + mainUnit);
         }
     }
@@ -96,24 +96,24 @@ public class PythonGenerator {
     private void generatePrefixDef(SafeLangParser.PrefixDefContext ctx) {
         // Exemplo:
         // prefix k := 1e3: real;
-        String name = ctx.ID().getText();
+        String name = pyName(ctx.ID().getText());
         String value = generateExpr(ctx.expr());
         lines.add(name + " = " + value);
     }
 
     private void generateVarDecl(SafeLangParser.VarDeclContext ctx) {
-        String name = ctx.ID().getText();
+        String name = pyName(ctx.ID().getText());
         lines.add(name + " = None");
     }
 
     private void generateVarDeclAssign(SafeLangParser.VarDeclAssignContext ctx) {
-        String name = ctx.ID().getText();
+        String name = pyName(ctx.ID().getText());
         String value = generateExpr(ctx.expr());
         lines.add(name + " = " + value);
     }
 
     private void generateAssignment(SafeLangParser.AssignmentContext ctx) {
-        String name = ctx.ID().getText();
+        String name = pyName(ctx.ID().getText());
         String value = generateExpr(ctx.expr());
         lines.add(name + " = " + value);
     }
@@ -224,7 +224,7 @@ public class PythonGenerator {
         }
 
         if (ctx.ID() != null) {
-            return ctx.ID().getText();
+            return pyName(ctx.ID().getText());
         }
 
         if (ctx.conversion() != null) {
@@ -278,5 +278,16 @@ public class PythonGenerator {
 
     private String generateLiteral(SafeLangParser.LiteralContext ctx) {
         return ctx.getText();
+    }
+
+    private String pyName(String name) {
+        return switch (name) {
+            case "False", "None", "True", "and", "as", "assert", "async", "await",
+                "break", "class", "continue", "def", "del", "elif", "else",
+                "except", "finally", "for", "from", "global", "if", "import",
+                "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise",
+                "return", "try", "while", "with", "yield" -> name + "_";
+            default -> name;
+        };
     }
 }
