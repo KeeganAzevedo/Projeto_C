@@ -1,0 +1,282 @@
+import java.util.ArrayList;
+import java.util.List;
+import org.antlr.v4.runtime.tree.TerminalNode;
+
+public class PythonGenerator {
+
+    private final List<String> lines = new ArrayList<>();
+
+    public String generate(SafeLangParser.ProgramContext program) {
+        lines.clear();
+
+        lines.add("# Generated Python code from SafeLang");
+        lines.add("");
+
+        for (SafeLangParser.StatementContext stmt : program.statement()) {
+            generateStatement(stmt);
+        }
+
+        return String.join("\n", lines) + "\n";
+    }
+
+    private void generateStatement(SafeLangParser.StatementContext stmt) {
+        if (stmt.useStmt() != null) {
+            // Para já ignoramos use na geração.
+            // A análise semântica deve tratar os ficheiros importados.
+            lines.add("# use " + stmt.useStmt().STRING_LITERAL().getText());
+        }
+        else if (stmt.typeDef() != null) {
+            generateTypeDef(stmt.typeDef());
+        }
+        else if (stmt.unitDef() != null) {
+            generateUnitDef(stmt.unitDef());
+        }
+        else if (stmt.prefixDef() != null) {
+            generatePrefixDef(stmt.prefixDef());
+        }
+        else if (stmt.varDecl() != null) {
+            generateVarDecl(stmt.varDecl());
+        }
+        else if (stmt.varDeclAssign() != null) {
+            generateVarDeclAssign(stmt.varDeclAssign());
+        }
+        else if (stmt.assignment() != null) {
+            generateAssignment(stmt.assignment());
+        }
+        else if (stmt.writeStmt() != null) {
+            generateWrite(stmt.writeStmt());
+        }
+        else if (stmt.writelnStmt() != null) {
+            generateWriteln(stmt.writelnStmt());
+        }
+    }
+
+    private void generateTypeDef(SafeLangParser.TypeDefContext ctx) {
+        // Exemplo SafeLang:
+        // type Length [meter,m]: real;
+        //
+        // Em Python, para permitir usar "meter" em expressões,
+        // criamos meter = 1.0 e m = meter.
+        if (ctx.unitSpec() != null) {
+            List<TerminalNode> ids = ctx.unitSpec().ID();
+
+            String mainUnit = ids.get(0).getText();
+            lines.add(mainUnit + " = 1.0");
+
+            if (ids.size() > 1) {
+                String alias = ids.get(1).getText();
+                lines.add(alias + " = " + mainUnit);
+            }
+        }
+        else {
+            lines.add("# type " + ctx.ID().getText());
+        }
+    }
+
+    private void generateUnitDef(SafeLangParser.UnitDefContext ctx) {
+        // Exemplo SafeLang:
+        // unit Length [inch,in] := 0.0254 * meter;
+        //
+        // Em Python:
+        // inch = 0.0254 * meter
+        // in = inch
+
+        List<TerminalNode> ids = ctx.unitSpec().ID();
+        String mainUnit = ids.get(0).getText();
+        String expr = generateExpr(ctx.expr());
+
+        lines.add(mainUnit + " = " + expr);
+
+        if (ids.size() > 1) {
+            String alias = ids.get(1).getText();
+            lines.add(alias + " = " + mainUnit);
+        }
+    }
+
+    private void generatePrefixDef(SafeLangParser.PrefixDefContext ctx) {
+        // Exemplo:
+        // prefix k := 1e3: real;
+        String name = ctx.ID().getText();
+        String value = generateExpr(ctx.expr());
+        lines.add(name + " = " + value);
+    }
+
+    private void generateVarDecl(SafeLangParser.VarDeclContext ctx) {
+        String name = ctx.ID().getText();
+        lines.add(name + " = None");
+    }
+
+    private void generateVarDeclAssign(SafeLangParser.VarDeclAssignContext ctx) {
+        String name = ctx.ID().getText();
+        String value = generateExpr(ctx.expr());
+        lines.add(name + " = " + value);
+    }
+
+    private void generateAssignment(SafeLangParser.AssignmentContext ctx) {
+        String name = ctx.ID().getText();
+        String value = generateExpr(ctx.expr());
+        lines.add(name + " = " + value);
+    }
+
+    private void generateWrite(SafeLangParser.WriteStmtContext ctx) {
+        String args = generateExprList(ctx.exprList());
+
+        if (args.isEmpty()) {
+            lines.add("print(end=\"\")");
+        } else {
+            lines.add("print(" + args + ", sep=\"\", end=\"\")");
+        }
+    }
+
+    private void generateWriteln(SafeLangParser.WritelnStmtContext ctx) {
+        if (ctx.exprList() == null) {
+            lines.add("print()");
+        } else {
+            String args = generateExprList(ctx.exprList());
+            lines.add("print(" + args + ", sep=\"\")");
+        }
+    }
+
+    private String generateExprList(SafeLangParser.ExprListContext ctx) {
+        List<String> parts = new ArrayList<>();
+
+        for (SafeLangParser.ExprContext expr : ctx.expr()) {
+            parts.add(generateExpr(expr));
+        }
+
+        return String.join(", ", parts);
+    }
+
+    private String generateExpr(SafeLangParser.ExprContext ctx) {
+        return generateAdditive(ctx.additive());
+    }
+
+    private String generateAdditive(SafeLangParser.AdditiveContext ctx) {
+        String result = generateMultiplicative(ctx.multiplicative(0));
+
+        for (int i = 1; i < ctx.multiplicative().size(); i++) {
+            String op = ctx.getChild(2 * i - 1).getText();
+            String right = generateMultiplicative(ctx.multiplicative(i));
+            result = "(" + result + " " + op + " " + right + ")";
+        }
+
+        return result;
+    }
+
+    private String generateMultiplicative(SafeLangParser.MultiplicativeContext ctx) {
+        String result = generatePower(ctx.power(0));
+
+        for (int i = 1; i < ctx.power().size(); i++) {
+            String op = ctx.getChild(2 * i - 1).getText();
+            String pyOp = translateMultiplicativeOperator(op);
+            String right = generatePower(ctx.power(i));
+            result = "(" + result + " " + pyOp + " " + right + ")";
+        }
+
+        return result;
+    }
+
+    private String translateMultiplicativeOperator(String op) {
+        if (op.equals("*")) {
+            return "*";
+        }
+
+        if (op.equals("/")) {
+            return "/";
+        }
+
+        if (op.equals("//")) {
+            return "//";
+        }
+
+        if (op.equals("\\") || op.equals("\\\\")) {
+            return "%";
+        }
+
+        throw new RuntimeException("Operador multiplicativo desconhecido: [" + op + "]");
+    }
+
+    private String generatePower(SafeLangParser.PowerContext ctx) {
+        String left = generateUnary(ctx.unary());
+
+        if (ctx.power() != null) {
+            String right = generatePower(ctx.power());
+            return "(" + left + " ** " + right + ")";
+        }
+
+        return left;
+    }
+
+    private String generateUnary(SafeLangParser.UnaryContext ctx) {
+        if (ctx.primary() != null) {
+            return generatePrimary(ctx.primary());
+        }
+
+        String op = ctx.getChild(0).getText();
+        String value = generateUnary(ctx.unary());
+
+        return "(" + op + value + ")";
+    }
+
+    private String generatePrimary(SafeLangParser.PrimaryContext ctx) {
+        if (ctx.literal() != null) {
+            return generateLiteral(ctx.literal());
+        }
+
+        if (ctx.ID() != null) {
+            return ctx.ID().getText();
+        }
+
+        if (ctx.conversion() != null) {
+            return generateConversion(ctx.conversion());
+        }
+
+        if (ctx.formatExpr() != null) {
+            return generateFormat(ctx.formatExpr());
+        }
+
+        if (ctx.readExpr() != null) {
+            return generateRead(ctx.readExpr());
+        }
+
+        if (ctx.expr() != null) {
+            return "(" + generateExpr(ctx.expr()) + ")";
+        }
+
+        throw new RuntimeException("Expressão primária não suportada: " + ctx.getText());
+    }
+
+    private String generateConversion(SafeLangParser.ConversionContext ctx) {
+        String type = ctx.conversionType().getText();
+        String value = generateExpr(ctx.expr());
+
+        return switch (type) {
+            case "integer" -> "int(" + value + ")";
+            case "real" -> "float(" + value + ")";
+            case "string" -> "str(" + value + ")";
+            default -> value;
+        };
+    }
+
+    private String generateFormat(SafeLangParser.FormatExprContext ctx) {
+        // SafeLang:
+        // format(valor, largura)
+        //
+        // Python simples:
+        // str(valor).ljust(int(largura))
+
+        String value = generateExpr(ctx.expr(0));
+        String width = generateExpr(ctx.expr(1));
+
+        return "str(" + value + ").ljust(int(" + width + "))";
+    }
+
+    private String generateRead(SafeLangParser.ReadExprContext ctx) {
+        String prompt = ctx.STRING_LITERAL().getText();
+        return "input(" + prompt + ")";
+    }
+
+    private String generateLiteral(SafeLangParser.LiteralContext ctx) {
+        return ctx.getText();
+    }
+}
